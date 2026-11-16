@@ -93,14 +93,32 @@
     });
   }
 
-  // ---------- Open helpers (legitimate – user-initiated new tabs) ----------
+  // ---------- Open helpers ----------
   function openUrl(url) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  function openYouTubeUrl(url) {
+    // Reuse a named popup for YouTube. Browsers may block popups opened from voice input;
+    // allow popups for this site if the browser asks.
+    window.open(
+      url,
+      "YouTubePopup",
+      "popup=yes,width=1200,height=800,scrollbars=yes,resizable=yes"
+    );
+  }
+
   function openYouTubeSearch(query) {
     const q = encodeURIComponent(query || "");
-    openUrl(q ? `https://www.youtube.com/results?search_query=${q}` : "https://www.youtube.com");
+    openYouTubeUrl(q ? `https://www.youtube.com/results?search_query=${q}` : "https://www.youtube.com");
+  }
+
+  function openYouTubeChannelSearch(channel) {
+    const params = new URLSearchParams({
+      search_query: `${channel} channel`,
+      sp: "EgIQAg==",
+    });
+    openYouTubeUrl(`https://www.youtube.com/results?${params.toString()}`);
   }
 
   function openApp(name) {
@@ -120,7 +138,8 @@
     };
     const key = name.toLowerCase().replace(/\s+/g, "");
     if (map[key]) {
-      openUrl(map[key]);
+      if (key === "youtube") openYouTubeUrl(map[key]);
+      else openUrl(map[key]);
       return true;
     }
     return false;
@@ -137,24 +156,44 @@
     els.transcript.textContent = text;
     const lower = text.toLowerCase();
 
+    // Open a YouTube channel search. Choose the channel, then its Videos tab to browse uploads.
+    const channelMatch =
+      lower.match(/^(?:open|go to|launch)\s+(?:the\s+)?(.+?)\s+(?:youtube\s+)?channel$/i) ||
+      lower.match(/^(?:open|go to|launch)\s+(?:the\s+)?(?:youtube\s+)?channel\s+(.+)$/i);
+    if (channelMatch) {
+      const channel = channelMatch[1].trim();
+      openYouTubeChannelSearch(channel);
+      await speak(`Opening YouTube channel results for ${channel}. Choose the channel to see its videos.`);
+      return;
+    }
+
+    // Open a video search on YouTube. The user chooses which result to play.
+    const videoMatch = lower.match(/^(?:play|watch|open|find|look up)\s+(.+?)\s+(?:video\s+)?on youtube$/i);
+    if (videoMatch) {
+      const query = videoMatch[1].replace(/^video\s+/i, "").trim();
+      openYouTubeSearch(query);
+      await speak(`Opening YouTube video results for ${query}.`);
+      return;
+    }
+
     // Open YouTube / search
     if (/^(open|go to|launch)\s+youtube\b/i.test(lower) || lower === "youtube") {
-      await speak("Opening YouTube.");
       openApp("youtube");
+      await speak("Opening YouTube.");
       return;
     }
     if (/search\s+(on\s+)?youtube\s+(for\s+)?(.+)/i.test(lower)) {
       const m = lower.match(/search\s+(?:on\s+)?youtube\s+(?:for\s+)?(.+)/i);
       const q = (m && m[1]) || "";
-      await speak(q ? `Searching YouTube for ${q}.` : "Opening YouTube search.");
       openYouTubeSearch(q);
+      await speak(q ? `Searching YouTube for ${q}.` : "Opening YouTube search.");
       return;
     }
     if (/^(play|find|look up)\s+(.+)\s+on\s+youtube/i.test(lower)) {
       const m = lower.match(/^(?:play|find|look up)\s+(.+)\s+on\s+youtube/i);
       const q = (m && m[1]) || "";
-      await speak(`Searching YouTube for ${q}.`);
       openYouTubeSearch(q);
+      await speak(`Opening YouTube video results for ${q}.`);
       return;
     }
 
@@ -199,7 +238,7 @@
     // Help
     if (/help|what can you do|commands/i.test(lower)) {
       await speak(
-        "You can say things like Open YouTube, Search YouTube for music, Open Instagram, or ask for the time."
+        "You can say Open YouTube, Open a channel name channel, Play a video name on YouTube, Search YouTube for music, Open Instagram, or ask for the time."
       );
       return;
     }
